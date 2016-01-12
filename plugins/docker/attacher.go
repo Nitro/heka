@@ -24,12 +24,24 @@ package docker
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/carlanton/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
+	"github.com/mozilla-services/heka/pipeline"
+)
+
+const (
+	CONNECT_RETRIES = 4
+	HEALTH_INTERVAL = 3*time.Second
+)
+
+var (
+    retryInterval = []time.Duration{ 1, 3, 5, 10 }
 )
 
 type AttachEvent struct {
@@ -65,9 +77,12 @@ type AttachManager struct {
 	events     chan *docker.APIEvents
 	eventReset chan struct{}
 	sentinel   struct{}
+    ir         pipeline.InputRunner
+	endpoint   string
+	certPath   string
 }
 
-func NewAttachManager(endpoint, certPath string, attachErrors chan<- error) (*AttachManager, error) {
+func newDockerClient(certPath string, endpoint string) (DockerClient, error) {
 	var client DockerClient
 	var err error
 
@@ -80,6 +95,11 @@ func NewAttachManager(endpoint, certPath string, attachErrors chan<- error) (*At
 		client, err = docker.NewTLSClient(endpoint, cert, key, ca)
 	}
 
+	return client, err
+}
+
+func NewAttachManager(endpoint string, certPath string, attachErrors chan<- error) (*AttachManager, error) {
+	client, err := newDockerClient(certPath, endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -92,21 +112,80 @@ func NewAttachManager(endpoint, certPath string, attachErrors chan<- error) (*At
 		events:   make(chan *docker.APIEvents),
 	}
 
+	return m, nil
+}
+
+func withRetries(doWork func() error) error {
+	var err error
+	for i := 0; i < CONNECT_RETRIES; i++ {
+		doWork()
+		if err == nil {
+			return nil
+		}
+		time.Sleep(retryInterval[i]*time.Second)
+	}
+
+	return err
+}
+
+func (m *AttachManager) Run(ir pipeline.InputRunner) {
+	m.ir = ir
+
 	// Attach to all currently running containers
-	if containers, err := client.ListContainers(docker.ListContainersOptions{}); err == nil {
+	attachAll := func() error {
+		containers, err := m.client.ListContainers(docker.ListContainersOptions{})
+		if err != nil {
+			return err
+		}
+
 		for _, listing := range containers {
 			m.attach(listing.ID[:12])
 		}
-	} else {
-		return nil, err
+
+		return nil
 	}
 
-	if err := client.AddEventListener(m.events); err != nil {
-		return nil, err
+	// Retry this up to CONNECT_RETRIES number of times, sleeping
+	// the defined interval. During this time the Docker client should
+	// get reconnected if there is a general connection issue.
+	err := withRetries(attachAll)
+	if err != nil {
+		m.ir.LogError(
+			fmt.Errorf("Failed to attach to Docker containers after %s retries. Plugin giving up.", CONNECT_RETRIES),
+		)
+		return
+	}
+
+	err = withRetries(func() error { return m.client.AddEventListener(m.events) })
+	if err != nil {
+		m.ir.LogError(
+			fmt.Errorf("Failed to add Docker event listener after %s retries. Plugin giving up.", CONNECT_RETRIES),
+		)
+		return
 	}
 
 	go m.recvDockerEvents()
-	return m, nil
+	go m.monitorConnectionHealth()
+}
+
+func (m *AttachManager) monitorConnectionHealth() {
+	for {
+		time.Sleep(HEALTH_INTERVAL)
+
+		err := m.client.Ping()
+		if err != nil {
+			m.ir.LogMessage("Lost connection to Docker, re-connecting")
+			m.client.RemoveEventListener(m.events)
+			m.events = make(chan *docker.APIEvents) // RemoveEventListener closes it
+
+			m.client, err = newDockerClient(m.certPath, m.endpoint)
+			if err == nil {
+				m.client.AddEventListener(m.events)
+			} else {
+				m.ir.LogError(fmt.Errorf("Can't reconnect to Docker!"))
+			}
+		}
+	}
 }
 
 func (m *AttachManager) recvDockerEvents() {

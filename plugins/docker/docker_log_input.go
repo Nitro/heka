@@ -10,6 +10,7 @@
 # Contributor(s):
 #   Anton Lindström (carlantonlindstrom@gmail.com)
 #   Rob Miller (rmiller@mozilla.com)
+#   Karl Matthias (karl.matthias@gonitro.com)
 #
 # ***** END LICENSE BLOCK *****/
 
@@ -67,6 +68,8 @@ func (di *DockerLogInput) Run(ir pipeline.InputRunner, h pipeline.PluginHelper) 
 		pack *pipeline.PipelinePack
 		ok   bool
 	)
+
+	di.attachMgr.Run(ir)
 
 	hostname := h.Hostname()
 
