@@ -123,7 +123,7 @@ func (m *AttachManager) monitorConnectionHealth() {
 		err := m.client.Ping()
 		if err != nil {
 			m.ir.LogError(fmt.Errorf("Docker is not responding. Bailing..."))
-			close(m.events)
+			close(m.errors)
 		}
 	}
 }
@@ -134,6 +134,7 @@ func (m *AttachManager) recvDockerEvents() {
 			go m.attach(msg.ID[:12])
 		}
 	}
+	m.ir.LogMessage("Events channel was closed...")
 	close(m.errors)
 }
 
