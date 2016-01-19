@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/carlanton/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
 	"github.com/mozilla-services/heka/message"
 	"github.com/mozilla-services/heka/pipeline"
 	"github.com/pborman/uuid"
@@ -18,7 +18,7 @@ type DockerEventInputConfig struct {
 
 type DockerEventInput struct {
 	conf         *DockerEventInputConfig
-	dockerClient *docker.Client
+	dockerClient DockerClient
 	eventStream  chan *docker.APIEvents
 	stopChan     chan error
 }
@@ -30,7 +30,7 @@ func (dei *DockerEventInput) ConfigStruct() interface{} {
 	}
 }
 
-func newDockerClient(endpoint string, certpath string) (*docker.Client, error) {
+func newDockerClient(endpoint string, certpath string) (DockerClient, error) {
 	var client *docker.Client
 	var err error
 	if certpath == "" {

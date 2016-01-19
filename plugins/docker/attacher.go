@@ -24,12 +24,18 @@ package docker
 
 import (
 	"bufio"
+	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/carlanton/go-dockerclient"
+	"github.com/fsouza/go-dockerclient"
+	"github.com/mozilla-services/heka/pipeline"
+)
+
+const (
+	HEALTH_INTERVAL = 3 * time.Second
 )
 
 type AttachEvent struct {
@@ -66,21 +72,11 @@ type AttachManager struct {
 	sentinel      struct{}
 	nameFromEnv   string
 	fieldsFromEnv []string
+	ir            pipeline.InputRunner
 }
 
 func NewAttachManager(endpoint, certPath string, attachErrors chan<- error, nameFromEnv string, fieldsFromEnv []string) (*AttachManager, error) {
-	var client DockerClient
-	var err error
-
-	if certPath == "" {
-		client, err = docker.NewClient(endpoint)
-	} else {
-		key := filepath.Join(certPath, "key.pem")
-		ca := filepath.Join(certPath, "ca.pem")
-		cert := filepath.Join(certPath, "cert.pem")
-		client, err = docker.NewTLSClient(endpoint, cert, key, ca)
-	}
-
+	client, err := newDockerClient(endpoint, certPath)
 	if err != nil {
 		return nil, err
 	}
@@ -95,21 +91,41 @@ func NewAttachManager(endpoint, certPath string, attachErrors chan<- error, name
 		fieldsFromEnv: fieldsFromEnv,
 	}
 
+	return m, nil
+}
+
+func (m *AttachManager) Run(ir pipeline.InputRunner) {
+	m.ir = ir
+
 	// Attach to all currently running containers
-	if containers, err := client.ListContainers(docker.ListContainersOptions{}); err == nil {
+	if containers, err := m.client.ListContainers(docker.ListContainersOptions{}); err == nil {
 		for _, listing := range containers {
+			m.ir.LogMessage("Attaching container: " + listing.ID[:12])
 			m.attach(listing.ID[:12])
 		}
 	} else {
-		return nil, err
+		return
 	}
 
-	if err := client.AddEventListener(m.events); err != nil {
-		return nil, err
+	if err := m.client.AddEventListener(m.events); err != nil {
+		m.ir.LogError(fmt.Errorf("Failed to listen to events!: %s", err.Error()))
+		close(m.events)
+		return
 	}
 
 	go m.recvDockerEvents()
-	return m, nil
+	go m.monitorConnectionHealth()
+}
+
+func (m *AttachManager) monitorConnectionHealth() {
+	for {
+		time.Sleep(HEALTH_INTERVAL)
+		err := m.client.Ping()
+		if err != nil {
+			m.ir.LogError(fmt.Errorf("Docker is not responding. Bailing..."))
+			close(m.events)
+		}
+	}
 }
 
 func (m *AttachManager) recvDockerEvents() {
