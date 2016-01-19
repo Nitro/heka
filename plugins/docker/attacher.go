@@ -123,7 +123,7 @@ func (m *AttachManager) monitorConnectionHealth() {
 		err := m.client.Ping()
 		if err != nil {
 			m.ir.LogError(fmt.Errorf("Docker is not responding. Bailing..."))
-			close(m.errors)
+			m.errors <- err
 		}
 	}
 }
