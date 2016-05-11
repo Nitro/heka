@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -31,7 +32,7 @@ func (dei *DockerEventInput) ConfigStruct() interface{} {
 
 func (dei *DockerEventInput) Init(config interface{}) error {
 	dei.conf = config.(*DockerEventInputConfig)
-	c, err := newDockerClient(dei.conf.Endpoint, dei.conf.CertPath)
+	c, err := newDockerClient(dei.conf.CertPath, dei.conf.Endpoint)
 	if err != nil {
 		return fmt.Errorf("DockerEventInput: failed to attach to docker event API: %s", err.Error())
 	}
@@ -60,10 +61,15 @@ func (dei *DockerEventInput) Run(ir pipeline.InputRunner, h pipeline.PluginHelpe
 	// Provides empty PipelinePacks
 	packSupply := ir.InChan()
 
+	var event *docker.APIEvents
 	ok = true
 	for ok {
 		select {
-		case event := <-dei.eventStream:
+		case event, ok = <-dei.eventStream:
+			if !ok {
+				err = errors.New("DockerEventInput: eventStream channel closed")
+				break
+			}
 			pack = <-packSupply
 			pack.Message.SetType("DockerEvent")
 			pack.Message.SetLogger(event.ID)

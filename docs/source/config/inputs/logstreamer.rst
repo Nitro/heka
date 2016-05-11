@@ -53,12 +53,20 @@ Config:
     When using multiple logstreams, the differentiator is a set of strings that
     will be used in the naming of the logger, and portions that match a captured
     group from the ``file_match`` will have their matched value substituted in.
+    Only the last (according to priority) file per differentiator is kept opened.
 - translation (hash map of hash maps of ints):
     A set of translation mappings for matched groupings to the ints to use for
     sorting purposes.
 - splitter (string, optional):
     Defaults to "TokenSplitter", which will split the log stream into one
     Heka message per line.
+
+.. versionadded:: 0.10
+
+- check_data_interval (string)
+    A time duration string. This interval is how often streams will be checked
+    for new data. Defaults to "250ms". If the plugin processes many logstreams,
+    you may increase this value to reduce the CPU load.
 
 .. versionadded:: 0.11
 
