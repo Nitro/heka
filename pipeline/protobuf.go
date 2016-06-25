@@ -52,6 +52,9 @@ func (p *ProtobufDecoder) Init(config interface{}) error {
 func (p *ProtobufDecoder) Decode(pack *PipelinePack) (
 	packs []*PipelinePack, err error) {
 
+	t := p.pConfig.Globals.Agent.Tracer.BeginTrace("ProtobufDecoder/Decode")
+  	defer t.EndTrace()
+
 	atomic.AddInt64(&p.processMessageCount, 1)
 
 	var startTime time.Time

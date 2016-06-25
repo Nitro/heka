@@ -30,6 +30,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/mozilla-services/heka/message"
 	notify "github.com/rafrombrc/go-notify"
+	"github.com/yvasiyarov/gorelic"
 )
 
 const (
@@ -60,6 +61,7 @@ type GlobalConfigStruct struct {
 	abortChan             chan struct{}
 	FullBufferMaxRetries  uint
 	exitCode              int
+	Agent                 *gorelic.Agent
 }
 
 // Creates a GlobalConfigStruct object populated w/ default values.

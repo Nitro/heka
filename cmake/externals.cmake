@@ -168,8 +168,11 @@ git_clone(https://github.com/eapache/queue v1.0.2)
 git_clone(http://github.com/klauspost/crc32 v1.0)
 git_clone(https://github.com/shopify/sarama 2acd68e45eac3abd90240ccb78673da642906fc5)
 git_clone(https://github.com/davecgh/go-spew 2df174808ee097f90d259e432cc04442cf60be21)
+git_clone(https://github.com/yvasiyarov/gorelic ae09aa139a2b7f638e2412baceaceebd41eff115)
+git_clone(https://github.com/yvasiyarov/go-metrics c25f46c4b94079672242ec48a545e7ca9ebe3aec)
+git_clone(https://github.com/yvasiyarov/newrelic_platform_go 9c099fbc30e90de5bb5c5f94aa5fd08f2daeaacd)
 
-add_dependencies(sarama snappy)
+add_dependencies(sarama snappy gorelic)
 
 if (INCLUDE_GEOIP)
     add_external_plugin(git https://github.com/abh/geoip da130741c8ed2052f5f455d56e552f2e997e1ce9)

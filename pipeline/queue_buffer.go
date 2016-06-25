@@ -31,6 +31,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/mozilla-services/heka/client"
 	"github.com/mozilla-services/heka/message"
+	"github.com/yvasiyarov/gorelic"
 )
 
 var QueueIsFull = errors.New("Queue is full")
@@ -231,6 +232,7 @@ type BufferReader struct {
 	checkpointFile     *os.File
 	queue              string
 	queueSize          *BufferSize
+	agent              *gorelic.Agent
 }
 
 type BufferSender interface {
@@ -245,6 +247,7 @@ func NewBufferReader(queue string, config *QueueBufferConfig, queueSize *BufferS
 		config:    config,
 		queueSize: queueSize,
 		runner:    runner,
+		agent:     pConfig.Globals.Agent,
 	}
 
 	pConfig.makersLock.RLock()
@@ -675,7 +678,13 @@ func (br *BufferReader) NextRecord(pack *PipelinePack) error {
 		}
 	}
 
-	n, record, err := br.sRunner.GetRecordFromStream(br.readFile)
+
+	var n int
+	var err error
+	var record []byte
+	br.agent.Tracer.Trace("Splitter/GetRecordFromStream", func() {
+		n, record, err = br.sRunner.GetRecordFromStream(br.readFile)
+	})
 	if err != nil {
 		if err == io.EOF {
 			// Look to see if there's a newer file, advance to it if so.

@@ -52,6 +52,7 @@ import (
 	_ "github.com/mozilla-services/heka/plugins/statsd"
 	_ "github.com/mozilla-services/heka/plugins/tcp"
 	_ "github.com/mozilla-services/heka/plugins/udp"
+	"github.com/yvasiyarov/gorelic"
 )
 
 const (
@@ -231,6 +232,14 @@ func main() {
 		exitCode = 1
 		return
 	}
+
+	pipeconf.Globals.Agent = gorelic.NewAgent()
+	pipeconf.Globals.Agent.NewrelicLicense = "e40b22632cc2d51753b5879d34675605bf5a9506"
+	pipeconf.Globals.Agent.NewrelicName = "Heka Collector"
+	pipeconf.Globals.Agent.CollectHTTPStat = true
+	pipeconf.Globals.Agent.CollectHTTPStatuses = true
+	pipeconf.Globals.Agent.Run()
+
 	exitCode = pipeline.Run(pipeconf)
 }
 
