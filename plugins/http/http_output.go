@@ -27,6 +27,7 @@ import (
 
 	"github.com/mozilla-services/heka/pipeline"
 	"github.com/mozilla-services/heka/plugins/tcp"
+	"github.com/yvasiyarov/gorelic"
 )
 
 type HttpOutput struct {
@@ -35,6 +36,7 @@ type HttpOutput struct {
 	client       *http.Client
 	useBasicAuth bool
 	sendBody     bool
+	agent        *gorelic.Agent
 }
 
 type HttpOutputConfig struct {
@@ -98,6 +100,8 @@ func (o *HttpOutput) Run(or pipeline.OutputRunner, h pipeline.PluginHelper) (err
 	)
 	inChan := or.InChan()
 
+	o.agent = h.PipelineConfig().Globals.Agent
+
 	for pack := range inChan {
 		outBytes, e = or.Encode(pack)
 		if e != nil {
@@ -128,6 +132,9 @@ func (o *HttpOutput) request(or pipeline.OutputRunner, outBytes []byte) (err err
 		reader     io.Reader
 		readCloser io.ReadCloser
 	)
+
+	t := o.agent.Tracer.BeginTrace("HttpOutput/request")
+  	defer t.EndTrace()
 
 	req := &http.Request{
 		Method: o.Method,
