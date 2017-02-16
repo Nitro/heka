@@ -313,8 +313,14 @@ func (m *AttachManager) handleOneStream(name string, in io.Reader, fields map[st
 	if !sRunner.UseMsgBytes() {
 		sRunner.SetPackDecorator(m.makePackDecorator(name, fields))
 	}
+	m.ir.LogMessage("Running with splitter " + sRunner.Name())
 
 	deliverer := m.ir.NewDeliverer(id)
+
+	defer func() {
+		deliverer.Done()
+		sRunner.Done()
+	}()
 
 	var err error
 	for err == nil {
@@ -323,7 +329,6 @@ func (m *AttachManager) handleOneStream(name string, in io.Reader, fields map[st
 			m.ir.LogError(fmt.Errorf("Error reading %s stream: %s", name, err.Error()))
 		}
 	}
-	sRunner.Done()
 
 	m.ir.LogMessage(fmt.Sprintf("Disconnecting %s stream from %s", name, containerId))
 }
