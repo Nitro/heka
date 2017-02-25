@@ -47,6 +47,7 @@ type HttpOutputConfig struct {
 	Username    string `toml:"username"`
 	Password    string `toml:"password"`
 	Tls         tcp.TlsConfig
+	Retry       bool `toml:"retry"`
 }
 
 func (o *HttpOutput) ConfigStruct() interface{} {
@@ -115,8 +116,17 @@ func (o *HttpOutput) Run(or pipeline.OutputRunner, h pipeline.PluginHelper) (err
 			continue
 		}
 		if e = o.request(or, outBytes); e != nil {
-			e = pipeline.NewRetryMessageError(e.Error())
-			pack.Recycle(e)
+			// New Relic (gorelic) instrumentation to track failed requests
+			t := o.agent.Tracer.BeginTrace("HttpOutput/failedRequest")
+  			defer t.EndTrace()
+
+			if o.HttpOutputConfig.Retry {
+				e = pipeline.NewRetryMessageError(e.Error())
+				pack.Recycle(e)
+				continue
+			}
+
+			pack.Recycle(nil)
 		} else {
 			or.UpdateCursor(pack.QueueCursor)
 			pack.Recycle(nil)
